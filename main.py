@@ -86,11 +86,14 @@ class PersonalDetailsRequest(BaseModel):
     nationality: str
 
 class EmploymentDetailsRequest(BaseModel):
-    designation: str
+    company_name: str  # Employer_Name in database
+    job_title: str     # Designation in database
     monthly_income: float
 
 class LoanApplicationRequest(BaseModel):
     loan_amount: float
+    loan_purpose: str  # e.g., "Home", "Car", "Personal", "Education"
+    tenure_years: int = 15  # Default to 15 years, options: 15 or 30
     loan_required: str = "Yes"
     application_date: Optional[date] = None
     loan_status: str = "PENDING"
@@ -329,10 +332,11 @@ async def add_employment_details(
 ):
     """
     Add employment details for an existing customer.
+    Collects company name, job title, and monthly income.
     
     Parameters:
     - customer_id: Customer ID to add employment details for
-    - details: Employment details
+    - details: Employment details (company_name, job_title, monthly_income)
     - db: Database session dependency
     
     Returns:
@@ -346,7 +350,8 @@ async def add_employment_details(
     # Create employment info
     employment = EmploymentInfo(
         Customer_ID=customer_id,
-        Designation=details.designation,
+        Employer_Name=details.company_name,
+        Designation=details.job_title,
         Monthly_Income=int(details.monthly_income),
         Employment_Status="Active",  # Default values
         Income_Verification="Pending"
@@ -361,7 +366,8 @@ async def add_employment_details(
             "message": "Employment details added successfully",
             "customer_id": customer_id,
             "details": {
-                "designation": employment.Designation,
+                "company_name": employment.Employer_Name,
+                "job_title": employment.Designation,
                 "monthly_income": float(employment.Monthly_Income),
                 "status": employment.Employment_Status,
                 "verification": employment.Income_Verification
@@ -384,10 +390,11 @@ async def add_loan_info(
 ):
     """
     Add loan application information for a customer.
+    Collects desired loan amount, loan purpose, and tenure (15 or 30 years default).
     
     Parameters:
     - customer_id: Customer ID to add loan info for
-    - details: Loan application details
+    - details: Loan application details (loan_amount, loan_purpose, tenure_years)
     - db: Database session dependency
     
     Returns:
@@ -398,15 +405,23 @@ async def add_loan_info(
     if not customer:
         raise HTTPException(status_code=404, detail="Customer not found")
     
+    # Validate tenure (only 15 or 30 years allowed)
+    if details.tenure_years not in [15, 30]:
+        raise HTTPException(
+            status_code=400, 
+            detail="Tenure must be either 15 or 30 years"
+        )
+    
     # Create loan info
     loan = LoanInfo(
         Customer_ID=customer_id,
         Loan_Required=details.loan_required,
         Loan_Amount=int(details.loan_amount),
-        Loan_Purpose="Home",  # Always set to Home
+        Loan_Purpose=details.loan_purpose,
+        Tenure_Months=details.tenure_years * 12,  # Convert years to months
         Application_Date=details.application_date or datetime.now().date(),
         Loan_Status=details.loan_status,
-        Collateral_Required="documents"  # Always set to documents
+        Collateral_Required="documents"  # Default value
     )
     
     try:
@@ -420,6 +435,8 @@ async def add_loan_info(
             "details": {
                 "loan_amount": float(loan.Loan_Amount),
                 "loan_purpose": loan.Loan_Purpose,
+                "tenure_years": details.tenure_years,
+                "tenure_months": loan.Tenure_Months,
                 "application_date": loan.Application_Date.isoformat(),
                 "status": loan.Loan_Status,
                 "collateral": loan.Collateral_Required
